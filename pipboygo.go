@@ -1,249 +1,100 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
-	"io"
-	"log"
+	"image/png"
+	"net"
 	"os"
+	"os/signal"
 	"strconv"
+	"time"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/nkatsaros/pipboygo/autodiscovery"
+	"github.com/nkatsaros/pipboygo/protocol"
 )
 
-func readString(r *bufio.Reader) (str string, err error) {
-	line, err := r.ReadBytes(0x00)
-	if err != nil {
-		return "", err
-	}
-	// remove the NUL byte
-	line = line[:len(line)-1]
-	return string(line), nil
+const port = 27000
+
+var pong = []byte{0, 0, 0, 0, 0}
+
+type Command struct {
+	Type int           `json:"type"`
+	Args []interface{} `json:"args"`
+	ID   int           `json:"id"`
 }
 
-func resolve(memory map[uint32]interface{}, value uint32) (r interface{}, err error) {
-	v, ok := memory[value]
-	if !ok {
-		return nil, fmt.Errorf("invalid value")
+func connect(logger *log.Entry, game autodiscovery.Game) (err error) {
+	conn, err := net.Dial("tcp4", net.JoinHostPort(game.IP, strconv.Itoa(port)))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		data, _ := json.Marshal(Command{13, []interface{}{}, 1})
+		size := uint32(len(data))
+		binary.Write(conn, binary.LittleEndian, size)
+		conn.Write([]byte{0x5})
+		conn.Write(data)
+	}()
+
+	decoder := protocol.NewDecoder(conn)
+	for {
+		channel, data, err := decoder.Decode()
+		if err != nil {
+			return err
+		}
+
+		switch channel {
+		case 0:
+			conn.Write(pong)
+		case 4:
+			lm := data.(protocol.LocalMap)
+			f, err := os.OpenFile("image.png", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+			if err != nil {
+				return err
+			}
+			err = png.Encode(f, lm.Image)
+			if err != nil {
+				return err
+			}
+			f.Close()
+		default:
+			logger.WithField("channel", channel).Info(data)
+		}
 	}
 
-	switch t := v.(type) {
-	case bool, uint8, int8, uint32, int32, float32, string:
-		return t, nil
-	case []uint32:
-		res := []interface{}{}
-		for _, thing := range t {
-			ires, err := resolve(memory, thing)
-			if err != nil {
-				return nil, err
-			}
-			res = append(res, ires)
-		}
-		return res, nil
-	case map[uint32]string:
-		res := map[string]interface{}{}
-		for location, name := range t {
-			ires, err := resolve(memory, location)
-			if err != nil {
-				return nil, err
-			}
-			res[name] = ires
-		}
-		return res, nil
-	default:
-		return nil, fmt.Errorf("invalid type")
-	}
+	return nil
 }
 
 func main() {
-	f, err := os.Open(os.Args[1])
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	currentOffset := 0
-
-	if len(os.Args) >= 3 {
-		offset, err := strconv.ParseInt(os.Args[2], 16, 32)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		currentOffset = int(offset)
-		log.Println("seeking to", offset)
-		_, err = f.Seek(offset, os.SEEK_SET)
-		if err != nil {
-			log.Fatalln(err)
-		}
-	}
-
-	br := bufio.NewReader(f)
-
-	memory := map[uint32]interface{}{}
-
-loop:
 	for {
-		var command byte
-		var addr uint32
-
-		err := binary.Read(br, binary.LittleEndian, &command)
-		switch {
-		case err == io.EOF:
-			break loop
-		case err != nil:
+		a, err := autodiscovery.Listen()
+		if err != nil {
 			log.Fatalln(err)
 		}
-		log.Printf("0x%X", currentOffset)
-		currentOffset += 1
-
-		if err = binary.Read(br, binary.LittleEndian, &addr); err != nil {
-			fmt.Println(addr, err)
-			log.Println(command, "here2!")
-			log.Fatalln(err)
+		var game autodiscovery.Game
+		for game = range a.Games() {
+			if game.IsBusy == false {
+				break
+			}
 		}
-		currentOffset += 4
+		a.Close()
 
-		switch command {
-		case 0:
-			// flag
-			var flagVal byte
-			var flag bool
-			if err := binary.Read(br, binary.LittleEndian, &flagVal); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 1
-			if flagVal == 0 {
-				flag = false
-			} else {
-				flag = true
-			}
-			log.Println("Flag", addr, flag)
-			memory[addr] = flag
-		case 1:
-			// value
-			var value int8
-			if err := binary.Read(br, binary.LittleEndian, &value); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 1
-			log.Println(command, addr, value)
-			memory[addr] = value
-		case 2:
-			// value
-			var value uint8
-			if err := binary.Read(br, binary.LittleEndian, &value); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 1
-			log.Println(command, addr, value)
-			memory[addr] = value
-		case 3:
-			// value
-			var value int32
-			if err := binary.Read(br, binary.LittleEndian, &value); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 4
-			log.Println(command, addr, value)
-			memory[addr] = value
-		case 4:
-			// value
-			var value uint32
-			if err := binary.Read(br, binary.LittleEndian, &value); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 4
-			log.Println(command, addr, value)
-			memory[addr] = value
-		case 5:
-			// value
-			var value float32
-			if err := binary.Read(br, binary.LittleEndian, &value); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 4
-			log.Println(command, addr, value)
-			memory[addr] = value
-		case 6:
-			// string
-			str, err := readString(br)
-			if err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += len(str) + 1
-			log.Println(command, addr, str)
-			memory[addr] = str
-		case 7:
-			// array
-			var elements uint16
-
-			if err := binary.Read(br, binary.LittleEndian, &elements); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 2
-
-			log.Println(command, addr, elements, "elements")
-
-			subaddrs := []uint32{}
-			for i := 0; i < int(elements); i++ {
-				var subaddr uint32
-				if err := binary.Read(br, binary.LittleEndian, &subaddr); err != nil {
-					log.Fatalln(err)
-				}
-				currentOffset += 4
-				log.Println("subaddr", subaddr)
-				subaddrs = append(subaddrs, subaddr)
-			}
-			memory[addr] = subaddrs
-		case 8:
-			// dictionary
-			var elements uint16
-			var nuls uint16
-
-			if err := binary.Read(br, binary.LittleEndian, &elements); err != nil {
-				log.Fatalln(err)
-			}
-			currentOffset += 2
-
-			log.Println(command, addr, elements, "elements")
-
-			dictionary := map[uint32]string{}
-			for i := 0; i < int(elements); i++ {
-				var subaddr uint32
-				if err := binary.Read(br, binary.LittleEndian, &subaddr); err != nil {
-					log.Fatalln(err)
-				}
-				currentOffset += 4
-
-				str, err := readString(br)
-				if err != nil {
-					log.Fatalln(err)
-				}
-				currentOffset += len(str) + 1
-				log.Println("subaddr", subaddr, str)
-				dictionary[subaddr] = str
-			}
-
-			// dictionaries have a two NUL bytes at the end
-			if err := binary.Read(br, binary.LittleEndian, &nuls); err != nil {
-				log.Fatalln(err)
-			}
-			if nuls != 0x0000 {
-				log.Fatalln("should be NUL")
-			}
-			currentOffset += 2
-			memory[addr] = dictionary
-		default:
-			log.Fatalln("unsupported command", command)
+		logger := log.WithFields(log.Fields{
+			"game_ip":   game.IP,
+			"game_type": game.MachineType,
+		})
+		logger.Info("connecting")
+		if err = connect(logger, game); err != nil {
+			continue
 		}
 	}
 
-	blah, err := resolve(memory, 0)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	data, err := json.Marshal(blah)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Println(string(data))
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, os.Kill)
+	<-signals
 }
