@@ -3,7 +3,6 @@ package protocol
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"io"
@@ -67,7 +66,6 @@ func UnmarshalMap(r io.Reader, size int) (img image.Image, extents Extents, err 
 		mr.read(&pixel)
 
 		if mr.err != nil {
-			fmt.Println("sad :(")
 			return nil, extents, mr.err
 		}
 
