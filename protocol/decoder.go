@@ -7,6 +7,17 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"io/ioutil"
+)
+
+const (
+	ChannelHeartbeat = 0
+	ChannelGameInfo  = 1
+	ChannelBusy      = 2
+	ChannelData      = 3
+	ChannelLocalMap  = 4
+	ChannelRequest   = 5
+	ChannelResponse  = 6
 )
 
 // {"lang": "en", "version": "1.1.30.0"}
@@ -33,6 +44,15 @@ type Decoder struct {
 	err error
 }
 
+type UnknownChannelError struct {
+	Channel int
+	Data    []byte
+}
+
+func (e *UnknownChannelError) Error() string {
+	return fmt.Sprintf("channel %d not implemented", e.Channel)
+}
+
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		r:  r,
@@ -57,38 +77,49 @@ func (dec *Decoder) Decode() (int, interface{}, error) {
 
 	channel := int(chanbyte)
 
+	lr := io.LimitReader(dec.br, int64(size))
+
+	// drain the rest of the channel data in case our handlers suck
+	defer io.Copy(ioutil.Discard, lr)
+
 	switch channel {
-	case 0:
+	case ChannelHeartbeat:
 		return channel, nil, nil
-	case 1:
+	case ChannelGameInfo:
 		var info GameInfo
-		if err := json.NewDecoder(io.LimitReader(dec.br, int64(size))).Decode(&info); err != nil {
+		if err := json.NewDecoder(lr).Decode(&info); err != nil {
 			return 0, nil, err
 		}
 		return channel, info, nil
-	case 3:
-		memory, err := UnmarshalBinary(io.LimitReader(dec.br, int64(size)))
+	case ChannelBusy:
+		return channel, nil, nil
+	case ChannelData:
+		memory, err := UnmarshalBinary(lr)
 		if err != nil {
 			return 0, nil, err
 		}
 		return channel, memory, nil
-	case 4:
-		image, extents, err := UnmarshalMap(io.LimitReader(dec.br, int64(size)), int(size))
+	case ChannelLocalMap:
+		image, extents, err := UnmarshalMap(lr, int(size))
 		if err != nil {
 			return 0, nil, err
 		}
 		return channel, LocalMap{image, extents}, nil
-	case 6:
+	case ChannelResponse:
 		var response CommandResponse
-		if err := json.NewDecoder(io.LimitReader(dec.br, int64(size))).Decode(&response); err != nil {
+		if err := json.NewDecoder(lr).Decode(&response); err != nil {
 			return 0, nil, err
 		}
 		return channel, response, nil
-	default:
-		return 0, nil, fmt.Errorf("channel %d not implemented", channel)
 	}
 
-	return channel, nil, nil
+	// read all data from the unknown channel
+	data, err := ioutil.ReadAll(lr)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return 0, nil, &UnknownChannelError{channel, data}
 }
 
 func (dec *Decoder) read(data interface{}) {
