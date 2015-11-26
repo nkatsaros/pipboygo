@@ -2,7 +2,7 @@
 An enhanced Pip-Boy second screen for Fallout 4
 
 ## Work in Progress
-Currently, the tool searches for the first non-busy game it can find and connects to it. When connected it dumps that it has received messages. If the game is busy or an error occurs it will try to connect to the next available server.
+Currently, the tool searches for the first non-busy game it can find and connects to it. When connected, it prints that it has received messages. If the game is busy or an error occurs it will try to connect to the next available game.
 
 ## Prerequisites
 * [Go](https://golang.org/), probably any version

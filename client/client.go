@@ -16,14 +16,6 @@ var ErrBusy = errors.New("the server is busy")
 
 const port = 27000
 
-var pong = []byte{0, 0, 0, 0, 0}
-
-type Command struct {
-	Type int           `json:"type"`
-	Args []interface{} `json:"args"`
-	ID   int           `json:"id"`
-}
-
 type Event struct {
 	Channel int
 	Data    interface{}
@@ -31,6 +23,7 @@ type Event struct {
 
 type Client struct {
 	conn net.Conn
+	enc  *protocol.Encoder
 
 	logger *log.Entry
 
@@ -63,6 +56,8 @@ func New(ip string) (c *Client, err error) {
 	if err != nil {
 		return nil, err
 	}
+
+	c.enc = protocol.NewEncoder(c.conn)
 
 	c.logger.Info("connected")
 
@@ -133,7 +128,9 @@ func (c *Client) main() {
 
 		switch channel {
 		case protocol.ChannelHeartbeat:
-			c.conn.Write(pong)
+			c.enc.EncodePong()
+		case protocol.ChannelResponse:
+			c.logger.Info(data)
 		default:
 			select {
 			case <-c.done:
