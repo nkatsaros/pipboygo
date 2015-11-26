@@ -27,9 +27,15 @@ loop:
 			logger.Fatalln(err)
 		}
 		var game autodiscovery.Game
-		for game = range a.Games() {
-			if game.IsBusy == false {
-				break
+	autodiscoverLoop:
+		for {
+			select {
+			case game = <-a.Games():
+				if game.IsBusy == false {
+					break autodiscoverLoop
+				}
+			case <-signals:
+				break loop
 			}
 		}
 		a.Close()
