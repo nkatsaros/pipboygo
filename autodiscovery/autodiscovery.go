@@ -12,7 +12,8 @@ import (
 const port = 28000
 const frequency = 1 * time.Second
 const timeout = 1 * time.Second
-const payload = `{"cmd": "autodiscover"}`
+
+var payload = []byte(`{"cmd": "autodiscover"}`)
 
 var listenAddr = &net.UDPAddr{IP: net.IPv4zero, Port: port}
 var broadcastAddr = &net.UDPAddr{IP: net.IPv4bcast, Port: port}
@@ -105,7 +106,7 @@ func (a *Autodiscovery) broadcastAutodiscover() {
 		case <-a.done:
 			return
 		case <-timer.C:
-			_, err := a.conn.WriteToUDP([]byte(payload), broadcastAddr)
+			_, err := a.conn.WriteToUDP(payload, broadcastAddr)
 			if err != nil {
 				log.Error(err)
 			}
