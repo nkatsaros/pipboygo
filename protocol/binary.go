@@ -198,7 +198,7 @@ loop:
 			}
 			currentOffset += 2
 
-			dictionary := PipboyDictionary{}
+			dictionary := map[string]uint32{}
 			for i := 0; i < int(elements); i++ {
 				var subaddr uint32
 				if err := binary.Read(br, binary.LittleEndian, &subaddr); err != nil {
@@ -212,7 +212,7 @@ loop:
 				}
 				currentOffset += len(str) + 1
 
-				dictionary[subaddr] = str
+				dictionary[str] = subaddr
 			}
 
 			// dictionaries have a two NUL bytes at the end

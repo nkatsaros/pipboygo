@@ -1,27 +1,57 @@
 package main
 
 import (
+	"bytes"
+	"flag"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
-	"os/signal"
+	"path/filepath"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/nkatsaros/pipboygo/autodiscovery"
 	"github.com/nkatsaros/pipboygo/client"
+	"github.com/nkatsaros/pipboygo/protocol"
+	"golang.org/x/image/bmp"
 )
 
+var publicFlag = flag.String("public", "", "path to public files")
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+type dbresponse struct {
+	Type string                    `json:"type"`
+	DB   protocol.PipboyDictionary `json:"database"`
+}
+
 func main() {
+	flag.Parse()
+
 	logger := log.WithFields(log.Fields{
 		"component": "app",
 	})
 
-	// watch for Ctrl+C
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, os.Kill)
+	_ = logger
+	if *publicFlag == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
 
-loop:
-	for {
-		// search for a non-busy game
+	r := gin.Default()
+
+	r.GET("/ws", func(c *gin.Context) {
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			logger.Error(err)
+			return
+		}
+
 		a, err := autodiscovery.Listen()
 		if err != nil {
 			logger.Fatalln(err)
@@ -34,45 +64,60 @@ loop:
 				if game.IsBusy == false {
 					break autodiscoverLoop
 				}
-			case <-signals:
-				break loop
 			}
 		}
 		a.Close()
 
 		// connect
-		c, err := client.New(game.IP)
+		pc, err := client.New(game.IP)
 		if err != nil {
-			// bad or busy server, try again in 1 second
 			logger.Error(err)
-			select {
-			case <-time.After(1 * time.Second):
-			case <-signals:
-				break loop
-			}
-			continue
+			return
 		}
 
-		// do nothing with the messages we receive!
 		err = func() error {
-			defer c.Close()
+			defer pc.Close()
+
+			localmapbuf := bytes.NewBuffer(nil)
+			localmaptimer := time.NewTimer(0)
+			defer localmaptimer.Stop()
 			for {
 				select {
-				case event := <-c.Event():
-					logger.WithField("channel", event.Channel).Info("received")
-				case err := <-c.Err():
+				case event := <-pc.Event():
+					switch t := event.Data.(type) {
+					case protocol.LocalMap:
+						localmaptimer.Reset(75 * time.Millisecond)
+						localmapbuf.Reset()
+						bmp.Encode(localmapbuf, t.Image)
+						conn.WriteMessage(websocket.BinaryMessage, localmapbuf.Bytes())
+					case protocol.PipboyDictionary:
+						conn.WriteJSON(dbresponse{
+							Type: "db",
+							DB:   t,
+						})
+					default:
+					}
+				case err := <-pc.Err():
 					logger.Error(err)
 					return err
-				case <-signals:
-					return nil
+				case <-localmaptimer.C:
+					pc.RequestLocalMapUpdate()
 				}
 			}
 		}()
 		if err != nil {
 			logger.Error(err)
-			continue
+			return
 		}
+	})
 
-		break
-	}
+	r.Static("/assets", filepath.Join(*publicFlag, "assets"))
+
+	r.NoRoute(func(c *gin.Context) {
+		c.File(filepath.Join(*publicFlag, "index.html"))
+	})
+
+	go http.ListenAndServe(":8001", nil)
+
+	r.Run(":8000")
 }
