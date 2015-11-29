@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"image"
-	"image/color"
 	"io"
 )
 
@@ -61,15 +60,9 @@ func UnmarshalMap(r io.Reader, size int) (img image.Image, extents Extents, err 
 
 	gray := image.NewGray(image.Rect(0, 0, width, height))
 
-	var pixel uint8
-	for i := 0; i < width*height; i++ {
-		mr.read(&pixel)
-
-		if mr.err != nil {
-			return nil, extents, mr.err
-		}
-
-		gray.SetGray(i%width, i/width, color.Gray{pixel})
+	_, err = io.ReadFull(mr.r, gray.Pix)
+	if err != nil {
+		return gray, extents, err
 	}
 
 	return gray, extents, nil
