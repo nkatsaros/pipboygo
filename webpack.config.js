@@ -9,7 +9,8 @@ module.exports = {
   module: {
     loaders: [
       { test: /\.js$/, exclude: /node_modules/, loader: 'babel' },
-      { test: /\.css$/, loader: 'style!css!postcss' }
+      { test: /\.css$/, loader: 'style!css?modules&importLoaders=1&localIdentName=[name]__[local]___[hash:base64:5]!postcss' },
+      { test: /\.(png)$/, loader: 'url-loader?limit=8192' }
     ]
   },
   postcss: function() {

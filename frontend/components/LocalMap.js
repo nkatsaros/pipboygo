@@ -1,12 +1,13 @@
 import ReactDOM from 'react-dom'
 import React, { Component, PropTypes } from 'react'
 
+import styles from './LocalMap.css'
+
 export default class LocalMap extends Component {
   static propTypes = {
     url: PropTypes.string.isRequired,
-    r: PropTypes.number,
-    g: PropTypes.number,
-    b: PropTypes.number
+    color: PropTypes.array.isRequired,
+    player: PropTypes.object.isRequired
   }
 
   componentDidMount() {
@@ -27,7 +28,7 @@ export default class LocalMap extends Component {
   }
 
   handleLoad() {
-    const { r, g, b } = this.props
+    const { color } = this.props
     this._canvas.width = this._image.width
     this._canvas.height = this._image.height
 
@@ -35,17 +36,22 @@ export default class LocalMap extends Component {
     this._ctx.globalCompositeOperation = "source-over"
     this._ctx.drawImage(this._image, 0, 0)
     this._ctx.globalCompositeOperation = "multiply"
-    this._ctx.fillStyle = `rgb(${Math.round((r||0)*255)}, ${Math.round((g||1)*255)}, ${Math.round((b||0)*255)})`
+    this._ctx.fillStyle = `rgb(${Math.round((color[0]||0)*255)}, ${Math.round((color[1]||1)*255)}, ${Math.round((color[2]||0)*255)})`
     this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height)
   }
 
-  shouldComponentUpdate() {
-    return false
-  }
+  // shouldComponentUpdate() {
+  //   return false
+  // }
 
   render() {
+    const { player } = this.props
+
     return (
-      <canvas ref={c => this._canvas = c} />
+      <div className={styles.container}>
+        <img className={styles.arrow} style={{transform: `rotate(${player.Rotation}deg)`}} src={require('./arrow.png')} />
+        <canvas ref={c => this._canvas = c} />
+      </div>
     )
   }
 }
