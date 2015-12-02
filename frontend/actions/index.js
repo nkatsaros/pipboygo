@@ -1,5 +1,5 @@
 export const LOCAL_MAP_UPDATE = 'LOCAL_MAP_UPDATE'
-export const DATABASE_UPDATE = 'DATABASE_UPDATE'
+export const MEMORY_UPDATE = 'MEMORY_UPDATE'
 
 export function updateLocalMap(url) {
   return {
@@ -8,9 +8,9 @@ export function updateLocalMap(url) {
   }
 }
 
-export function updateDatabase(database) {
+export function updateMemory(memory) {
   return {
-    type: DATABASE_UPDATE,
-    database
+    type: MEMORY_UPDATE,
+    memory
   }
 }

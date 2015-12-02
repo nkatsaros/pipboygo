@@ -1,5 +1,5 @@
 import store from '../getStore'
-import { updateLocalMap, updateDatabase } from '../actions'
+import { updateLocalMap, updateMemory } from '../actions'
 
 let ws_uri
 
@@ -19,8 +19,8 @@ socket.onmessage = (event) => {
     store.dispatch(updateLocalMap(URL.createObjectURL(event.data)))
   } else {
     let data = JSON.parse(event.data)
-    if (data.type === "db") {
-      store.dispatch(updateDatabase(data.database))
+    if (data.type === "memory_update") {
+      store.dispatch(updateMemory(data.memory))
     }
   }
 }

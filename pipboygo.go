@@ -25,9 +25,9 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-type dbresponse struct {
-	Type string                    `json:"type"`
-	DB   protocol.PipboyDictionary `json:"database"`
+type memresponse struct {
+	Type   string                `json:"type"`
+	Memory protocol.PipboyMemory `json:"memory"`
 }
 
 func main() {
@@ -90,10 +90,10 @@ func main() {
 						localmapbuf.Reset()
 						bmp.Encode(localmapbuf, t.Image)
 						conn.WriteMessage(websocket.BinaryMessage, localmapbuf.Bytes())
-					case protocol.PipboyDictionary:
-						conn.WriteJSON(dbresponse{
-							Type: "db",
-							DB:   t,
+					case protocol.PipboyMemory:
+						conn.WriteJSON(memresponse{
+							Type:   "memory_update",
+							Memory: t,
 						})
 					default:
 					}

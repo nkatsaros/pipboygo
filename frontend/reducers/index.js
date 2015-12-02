@@ -1,9 +1,9 @@
 import { combineReducers } from 'redux'
-import database from './database'
+import memory from './memory'
 import localmap from './localmap'
 
 const rootReducer = combineReducers({
-  database,
+  memory,
   localmap
 })
 
