@@ -7,7 +7,9 @@ export default function localmap(state = {
 }, action) {
   switch (action.type) {
     case MEMORY_UPDATE:
-      return { ...state, loaded: true }
+      // check is addr 0 was deleted
+      let loading = action.memory.removed.filter(removed => removed === 0).length > 0
+      return { ...state, loaded: !loading }
     default:
       return state
   }

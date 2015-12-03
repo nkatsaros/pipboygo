@@ -18,7 +18,6 @@ function mapStateToProps(state) {
   return {
     loading: false,
     localmap: state.localmap,
-    memory: resolveAddress(state, 0),
     effectColor: getValue(state, ["Status", "EffectColor"]),
     localPlayer: getValue(state, ["Map", "Local", "Player"])
   }
@@ -32,12 +31,11 @@ class App extends Component {
       return <div>loading</div>
     }
 
-    const { memory, localmap, effectColor, localPlayer } = this.props;
+    const { localmap, effectColor, localPlayer } = this.props;
 
     return (
       <div>
-        <LocalMap url={localmap} color={effectColor} player={localPlayer} />
-        <p>{JSON.stringify(memory)}</p>
+        <LocalMap buffer={localmap} color={effectColor} player={localPlayer} />
       </div>
     )
   }

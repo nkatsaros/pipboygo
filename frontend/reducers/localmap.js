@@ -2,10 +2,10 @@ import {
   LOCAL_MAP_UPDATE
 } from '../actions'
 
-export default function localmap(state = "", action) {
+export default function localmap(state = null, action) {
   switch (action.type) {
     case LOCAL_MAP_UPDATE:
-      return action.url
+      return action.buffer
     default:
       return state
   }

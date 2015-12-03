@@ -13,10 +13,11 @@ ws_uri += "//" + location.host
 ws_uri += "/ws"
 
 let socket = new WebSocket(ws_uri)
+socket.binaryType = 'arraybuffer';
 
 socket.onmessage = (event) => {
-  if (event.data instanceof Blob) {
-    store.dispatch(updateLocalMap(URL.createObjectURL(event.data)))
+  if (event.data instanceof ArrayBuffer) {
+    store.dispatch(updateLocalMap(event.data))
   } else {
     let data = JSON.parse(event.data)
     if (data.type === "memory_update") {

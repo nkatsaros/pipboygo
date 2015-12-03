@@ -1,57 +1,91 @@
 import ReactDOM from 'react-dom'
 import React, { Component, PropTypes } from 'react'
+import THREE from 'three'
 
-import styles from './LocalMap.css'
+const width = 768
+const height = 360
+
+import arrowImage from './arrow.gif'
 
 export default class LocalMap extends Component {
   static propTypes = {
-    url: PropTypes.string.isRequired,
+    buffer: PropTypes.object,
     color: PropTypes.array.isRequired,
     player: PropTypes.object.isRequired
   }
 
   componentDidMount() {
-    this._image = new Image()
-    this._image.addEventListener('load', ::this.handleLoad)
+    this._scene = new THREE.Scene()
+    this._camera = new THREE.OrthographicCamera(width / -2, width / 2, height / 2, height / -2, 1, 1000)
 
-    this._ctx = this._canvas.getContext('2d')
+    this._renderer = new THREE.WebGLRenderer()
+
+    this._renderer.setSize(width, height)
+    this._container.appendChild(this._renderer.domElement)
+
+    // setup map geometry
+    const geometry = new THREE.PlaneGeometry(width, height)
+    const material = new THREE.MeshBasicMaterial({ color: 0xffffff })
+    this._map = new THREE.Mesh(geometry, material)
+    this._scene.add(this._map)
+
+    // setup arrow geometry
+    const arrowGeom = new THREE.PlaneGeometry(32, 32)
+    const arrowTexture = THREE.ImageUtils.loadTexture(arrowImage)
+    arrowTexture.needsUpdate = true
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: arrowTexture, transparent: true })
+    this._arrow = new THREE.Mesh(arrowGeom, arrowMat)
+    this._scene.add(this._arrow)
+
+
+    this._camera.position.z = 5
+
+    this._renderer.render(this._scene, this._camera)
   }
 
   componentWillReceiveProps(nextProps) {
-    if (nextProps.url !== this.props.url) {
-      this._image.src = nextProps.url
+    if (nextProps.buffer !== this.props.buffer) {
+      // dispose old texture
+      if (this._map.material.map) {
+        this._map.material.map.dispose()
+      }
+
+      const texture = new THREE.DataTexture(new Uint8Array(nextProps.buffer), width, height, THREE.LuminanceFormat, THREE.UnsignedByteType)
+      texture.flipY = true
+      texture.needsUpdate = true
+
+      this._map.material.map = texture
+      this._map.material.needsUpdate = true
+    }
+
+    if (nextProps.player !== this.props.player) {
+      this._arrow.rotation.z = THREE.Math.degToRad(nextProps.player.Rotation)*-1
+    }
+
+    if (nextProps.color !== this.props.color) {
+      // use selected pipboy color
+      const color = new THREE.Color(nextProps.color[0], nextProps.color[1], nextProps.color[2])
+      this._map.material.color.setHex(color.getHex())
+      this._arrow.material.color.setHex(color.getHex())
+      this._map.material.needsUpdate = true
+      this._arrow.material.needsUpdate = true
+    }
+
+    if (nextProps !== this.props) {
+      this._renderer.render(this._scene, this._camera)
     }
   }
 
   componentWillUnmount() {
-    this._image.removeEventListener('load', ::this.handleLoad)
   }
 
-  handleLoad() {
-    const { color } = this.props
-    this._canvas.width = this._image.width
-    this._canvas.height = this._image.height
-
-    URL.revokeObjectURL(this._image.src)
-    this._ctx.globalCompositeOperation = "source-over"
-    this._ctx.drawImage(this._image, 0, 0)
-    this._ctx.globalCompositeOperation = "multiply"
-    this._ctx.fillStyle = `rgb(${Math.round((color[0]||0)*255)}, ${Math.round((color[1]||1)*255)}, ${Math.round((color[2]||0)*255)})`
-    this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height)
+  shouldComponentUpdate() {
+    return false
   }
-
-  // shouldComponentUpdate() {
-  //   return false
-  // }
 
   render() {
-    const { player } = this.props
-
     return (
-      <div className={styles.container}>
-        <img className={styles.arrow} style={{transform: `rotate(${player.Rotation}deg)`}} src={require('./arrow.png')} />
-        <canvas ref={c => this._canvas = c} />
-      </div>
+      <div ref={c => this._container = c} />
     )
   }
 }

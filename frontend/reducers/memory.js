@@ -6,10 +6,7 @@ export default function memory(state = {}, action) {
   switch (action.type) {
     case MEMORY_UPDATE:
       let nextState = {...state, ...action.memory.added}
-      for (let removed in action.memory.removed) {
-        console.log("removed", removed)
-        delete nextState[removed]
-      }
+      action.memory.removed.forEach(removed => delete nextState[removed])
       return nextState
     default:
       return state

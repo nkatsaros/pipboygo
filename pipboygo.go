@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"flag"
+	"image"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -15,7 +15,6 @@ import (
 	"github.com/nkatsaros/pipboygo/autodiscovery"
 	"github.com/nkatsaros/pipboygo/client"
 	"github.com/nkatsaros/pipboygo/protocol"
-	"golang.org/x/image/bmp"
 )
 
 var publicFlag = flag.String("public", "", "path to public files")
@@ -28,6 +27,11 @@ var upgrader = websocket.Upgrader{
 type memresponse struct {
 	Type   string                `json:"type"`
 	Memory protocol.PipboyMemory `json:"memory"`
+}
+
+type localmapmetaresponse struct {
+	Type    string           `json:"type"`
+	Extents protocol.Extents `json:"extents"`
 }
 
 func main() {
@@ -78,7 +82,6 @@ func main() {
 		err = func() error {
 			defer pc.Close()
 
-			localmapbuf := bytes.NewBuffer(nil)
 			localmaptimer := time.NewTimer(0)
 			defer localmaptimer.Stop()
 			for {
@@ -86,10 +89,11 @@ func main() {
 				case event := <-pc.Event():
 					switch t := event.Data.(type) {
 					case protocol.LocalMap:
-						localmaptimer.Reset(75 * time.Millisecond)
-						localmapbuf.Reset()
-						bmp.Encode(localmapbuf, t.Image)
-						conn.WriteMessage(websocket.BinaryMessage, localmapbuf.Bytes())
+						conn.WriteJSON(localmapmetaresponse{
+							Type:    "local_map_metadata",
+							Extents: t.Extents,
+						})
+						conn.WriteMessage(websocket.BinaryMessage, t.Image.(*image.Gray).Pix)
 					case protocol.PipboyMemory:
 						conn.WriteJSON(memresponse{
 							Type:   "memory_update",
@@ -102,6 +106,7 @@ func main() {
 					return err
 				case <-localmaptimer.C:
 					pc.RequestLocalMapUpdate()
+					localmaptimer.Reset(75 * time.Millisecond)
 				}
 			}
 		}()
